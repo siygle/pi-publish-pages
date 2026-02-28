@@ -1,7 +1,7 @@
 {
   "name": "pi-publish-pages",
   "version": "0.1.0",
-  "description": "Self-hosted Telegraph alternative for pi. Publish markdown pages with full CRUD support including delete.",
+  "description": "Telegraph (telegra.ph) wrapper extension for pi. Publish, update, delete (soft-delete) pages via Telegraph API.",
   "type": "module",
   "main": "dist/index.js",
   "pi": {

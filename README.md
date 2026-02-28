@@ -1,99 +1,59 @@
 # pi-publish-pages
 
-Self-hosted Telegraph alternative for [pi](https://github.com/badlogic/pi). Publish markdown pages to a URL with full CRUD support — including **delete** (which Telegraph doesn't support).
+[Telegraph (telegra.ph)](https://telegra.ph) wrapper extension for [pi](https://github.com/badlogic/pi). 發佈、更新、刪除 Telegraph 頁面。
 
-## Features
+Telegraph 本身不支援刪除，這個 extension 透過 `editPage` API 將內容清空並替換為在地化的「已刪除」提示來實現軟刪除。
 
-- 📝 **Create** — publish markdown as a styled web page
-- ✏️ **Update** — modify title and content of existing pages
-- 🗑️ **Delete** — soft-delete pages (content replaced with localized "Deleted" notice)
-- 📋 **List** — view all published pages
-- 🌓 **Dark mode** — automatic dark/light theme based on system preference
-- 🌏 **i18n** — delete notices in zh-TW, zh-CN, en, ja, ko
-- 🔗 **Standalone script** — `scripts/publish.sh` for use in cron jobs and other skills
+## 功能
 
-## Install
+- 📝 **建立** — 將 markdown 發佈為 Telegraph 頁面
+- ✏️ **更新** — 修改已有頁面的標題與內容
+- 🗑️ **刪除** — 軟刪除（清空內容，顯示在地化的刪除提示）
+- 📋 **列出** — 列出帳號下所有頁面
+- 🔍 **查詢** — 取得頁面資訊
+- 🌏 **多語系刪除提示** — zh-TW、zh-CN、en、ja、ko
+
+## 安裝
 
 ```bash
 pi install npm:pi-publish-pages
 ```
 
-## Configuration
+## 設定
 
-Config file: `~/.pi/publish-pages/config.json`
+啟動 pi 後執行 `/pages-setup` 指令，或手動建立設定檔：
+
+`~/.pi/publish-pages/config.json`
 
 ```json
 {
-  "port": 8787,
-  "baseUrl": "https://pages.example.com",
-  "autoStart": true
+  "access_token": "YOUR_TELEGRAPH_ACCESS_TOKEN",
+  "author_name": "Pi Agent"
 }
 ```
 
-- `port` — HTTP server port (default: `8787`)
-- `baseUrl` — Public URL prefix for generated links. If empty, uses `http://localhost:{port}`
-- `autoStart` — Start the server automatically when pi starts (default: `true`)
+也會自動讀取舊的 `~/.pi/agent/schedule-config/telegraph.json` 設定。
 
-### Reverse Proxy (Traefik / Nginx)
+## 使用方式
 
-To serve pages at a public URL, set up a reverse proxy to `localhost:8787` and update `baseUrl` in config.
+### LLM 工具
 
-## Usage
-
-### As a pi tool (LLM-callable)
-
-The extension registers a `publish_page` tool that the LLM can call:
+Extension 註冊了 `publish_page` 工具，LLM 可以直接呼叫：
 
 ```
-Please publish this analysis report as a web page.
+幫我把這份分析報告發佈到 Telegraph。
 ```
 
-### As a command
-
 ```
-/pages        — list all published pages
-/pages-server — show server status
+刪除這個頁面：https://telegra.ph/My-Page-02-27
 ```
 
-### Standalone script (for cron jobs / other skills)
+### 指令
 
-```bash
-# Publish
-./scripts/publish.sh "Page Title" /path/to/report.md
-# Output: http://localhost:8787/260228-a1b2c3d4
-
-# Delete
-./scripts/publish.sh --delete 260228-a1b2c3d4
-
-# List
-./scripts/publish.sh --list
 ```
-
-## Replacing Telegraph in existing skills
-
-Replace the Telegraph publish step with:
-
-```bash
-# Before (Telegraph)
-python3 publish-telegraph.py "$TITLE" "$MD_FILE"
-
-# After (pi-publish-pages)
-/path/to/pi-publish-pages/scripts/publish.sh "$TITLE" "$MD_FILE"
+/pages        — 列出所有 Telegraph 頁面
+/pages-setup  — 設定 Telegraph access token
 ```
-
-Both output the page URL to stdout.
-
-## API
-
-The server exposes a simple JSON API:
-
-- `GET /` — health check
-- `GET /api/pages` — list all pages (JSON)
-- `GET /:id` — view a page (HTML)
-
-## Storage
-
-Pages are stored as JSON files in `~/.pi/publish-pages/pages/`. Each page file contains the title, original markdown, rendered HTML, and metadata. Soft-deleted pages retain their file but content is replaced with a localized notice.
 
 ## License
 

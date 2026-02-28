@@ -1,21 +1,14 @@
 /**
- * Minimal markdown-to-HTML converter.
- * No external dependencies — handles the subset we need for published pages.
+ * Markdown → Telegraph Node[] converter.
+ * Converts markdown to Telegraph's native node format for the API.
  */
 
-export function markdownToHtml(md: string): string {
-  const lines = md.split("\n");
-  const out: string[] = [];
-  let i = 0;
-  let inList = false;
-  let listTag = "";
+import type { TelegraphNode } from "./telegraph.js";
 
-  const flushList = () => {
-    if (inList) {
-      out.push(`</${listTag}>`);
-      inList = false;
-    }
-  };
+export function markdownToNodes(md: string): TelegraphNode[] {
+  const lines = md.trim().split("\n");
+  const nodes: TelegraphNode[] = [];
+  let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
@@ -23,15 +16,13 @@ export function markdownToHtml(md: string): string {
 
     // Empty line
     if (!trimmed) {
-      flushList();
       i++;
       continue;
     }
 
     // Horizontal rule
     if (/^-{3,}\s*$/.test(trimmed) || /^\*{3,}\s*$/.test(trimmed)) {
-      flushList();
-      out.push("<hr>");
+      nodes.push({ tag: "hr" });
       i++;
       continue;
     }
@@ -39,83 +30,83 @@ export function markdownToHtml(md: string): string {
     // Headings
     const hm = trimmed.match(/^(#{1,6})\s+(.+)$/);
     if (hm) {
-      flushList();
       const level = hm[1].length;
-      out.push(`<h${level}>${inlineMarkdown(hm[2])}</h${level}>`);
+      const tag = level <= 2 ? "h3" : "h4";
+      nodes.push({ tag, children: parseInline(hm[2]) });
       i++;
       continue;
     }
 
     // Code block
     if (trimmed.startsWith("```")) {
-      flushList();
-      const lang = trimmed.slice(3).trim();
       const codeLines: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        codeLines.push(escapeHtml(lines[i]));
+        codeLines.push(lines[i]);
         i++;
       }
       i++; // skip closing ```
-      const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : "";
-      out.push(`<pre><code${langAttr}>${codeLines.join("\n")}</code></pre>`);
+      nodes.push({ tag: "pre", children: [codeLines.join("\n")] });
       continue;
     }
 
     // Blockquote
     if (trimmed.startsWith(">")) {
-      flushList();
       const quoteLines: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith(">")) {
         quoteLines.push(lines[i].trim().replace(/^>\s?/, ""));
         i++;
       }
-      out.push(`<blockquote><p>${inlineMarkdown(quoteLines.join(" "))}</p></blockquote>`);
+      nodes.push({
+        tag: "blockquote",
+        children: parseInline(quoteLines.join(" ")),
+      });
       continue;
     }
 
-    // Unordered list
-    const ulm = trimmed.match(/^[-*•]\s+(.*)$/);
-    if (ulm) {
-      if (!inList || listTag !== "ul") {
-        flushList();
-        out.push("<ul>");
-        inList = true;
-        listTag = "ul";
-      }
-      out.push(`<li>${inlineMarkdown(ulm[1])}</li>`);
-      i++;
-      continue;
-    }
-
-    // Ordered list
-    const olm = trimmed.match(/^(\d+)\.\s+(.*)$/);
-    if (olm) {
-      if (!inList || listTag !== "ol") {
-        flushList();
-        out.push("<ol>");
-        inList = true;
-        listTag = "ol";
-      }
-      out.push(`<li>${inlineMarkdown(olm[2])}</li>`);
-      i++;
-      continue;
-    }
-
-    // Table
-    if (trimmed.includes("|") && trimmed.startsWith("|")) {
-      flushList();
-      const tableLines: string[] = [];
-      while (i < lines.length && lines[i].trim().startsWith("|")) {
-        tableLines.push(lines[i].trim());
+    // List items (unordered or ordered)
+    if (/^(\d+\.|[-*•])\s/.test(trimmed)) {
+      while (i < lines.length) {
+        const l = lines[i].trim();
+        const lm = l.match(/^(\d+\.|[-*•])\s+(.*)$/);
+        if (lm) {
+          nodes.push({ tag: "p", children: parseInline(lm[2]) });
+        } else if (l.startsWith("   ") || l.startsWith("\t")) {
+          // continuation of previous item — skip
+        } else if (l === "") {
+          i++;
+          break;
+        } else {
+          break;
+        }
         i++;
       }
-      out.push(parseTable(tableLines));
       continue;
     }
 
-    // Paragraph
-    flushList();
+    // Table — convert to text representation (Telegraph doesn't support tables natively)
+    if (trimmed.includes("|") && trimmed.startsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const row = lines[i].trim();
+        // Skip separator rows
+        if (!/^[\s|:-]+$/.test(row.replace(/\|/g, "").trim())) {
+          tableLines.push(row);
+        }
+        i++;
+      }
+      for (const row of tableLines) {
+        const cells = row
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => c.trim());
+        nodes.push({ tag: "p", children: parseInline(cells.join(" | ")) });
+      }
+      continue;
+    }
+
+    // Regular paragraph
     const paraLines: string[] = [];
     while (
       i < lines.length &&
@@ -131,83 +122,44 @@ export function markdownToHtml(md: string): string {
       i++;
     }
     if (paraLines.length) {
-      out.push(`<p>${inlineMarkdown(paraLines.join(" "))}</p>`);
+      nodes.push({ tag: "p", children: parseInline(paraLines.join("\n")) });
     }
   }
 
-  flushList();
-  return out.join("\n");
-}
-
-function parseTable(lines: string[]): string {
-  if (lines.length < 2) return lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("\n");
-
-  const parseCells = (line: string) =>
-    line
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((c) => c.trim());
-
-  const headers = parseCells(lines[0]);
-  // Skip separator line (line[1] is usually |---|---|)
-  const bodyStart = /^[\s|:-]+$/.test(lines[1]?.replace(/\|/g, "").trim() || "") ? 2 : 1;
-
-  let html = "<table>\n<thead><tr>";
-  for (const h of headers) {
-    html += `<th>${inlineMarkdown(h)}</th>`;
-  }
-  html += "</tr></thead>\n<tbody>\n";
-
-  for (let r = bodyStart; r < lines.length; r++) {
-    const cells = parseCells(lines[r]);
-    html += "<tr>";
-    for (const c of cells) {
-      html += `<td>${inlineMarkdown(c)}</td>`;
-    }
-    html += "</tr>\n";
-  }
-  html += "</tbody></table>";
-  return html;
+  return nodes;
 }
 
 /**
- * Inline markdown: **bold**, *italic*, `code`, [link](url), ~~strike~~, images
+ * Parse inline markdown: **bold**, *italic*, `code`, [link](url)
  */
-function inlineMarkdown(text: string): string {
-  let s = escapeHtml(text);
+function parseInline(text: string): TelegraphNode[] {
+  const result: TelegraphNode[] = [];
+  let pos = 0;
 
-  // Images: ![alt](url)
-  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%">');
+  const pattern = /(\*\*(.+?)\*\*)|(\*([^*]+?)\*)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))/g;
 
-  // Links: [text](url)
-  s = s.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener">$1</a>'
-  );
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > pos) {
+      result.push(text.slice(pos, m.index));
+    }
 
-  // Bold: **text**
-  s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    if (m[2]) {
+      result.push({ tag: "strong", children: [m[2]] });
+    } else if (m[4]) {
+      result.push({ tag: "em", children: [m[4]] });
+    } else if (m[6]) {
+      result.push({ tag: "code", children: [m[6]] });
+    } else if (m[8] && m[9]) {
+      result.push({ tag: "a", attrs: { href: m[9] }, children: [m[8]] });
+    }
 
-  // Strikethrough: ~~text~~
-  s = s.replace(/~~(.+?)~~/g, "<del>$1</del>");
+    pos = m.index + m[0].length;
+  }
 
-  // Italic: *text* (but not inside words with *)
-  s = s.replace(/(?<!\w)\*([^*]+?)\*(?!\w)/g, "<em>$1</em>");
+  if (pos < text.length) {
+    result.push(text.slice(pos));
+  }
 
-  // Inline code: `text`
-  s = s.replace(/`([^`]+?)`/g, "<code>$1</code>");
-
-  // Line break: two trailing spaces or explicit <br>
-  s = s.replace(/ {2,}$/gm, "<br>");
-
-  return s;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return result.length ? result : [text];
 }
