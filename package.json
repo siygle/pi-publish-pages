@@ -1,0 +1,40 @@
+{
+  "name": "pi-publish-pages",
+  "version": "0.1.0",
+  "description": "Self-hosted Telegraph alternative for pi. Publish markdown pages with full CRUD support including delete.",
+  "type": "module",
+  "main": "dist/index.js",
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "latest",
+    "@mariozechner/pi-coding-agent": "latest",
+    "@mariozechner/pi-tui": "latest",
+    "@sinclair/typebox": "^0.34.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md"
+  ],
+  "keywords": [
+    "pi",
+    "extension",
+    "telegraph",
+    "publish",
+    "markdown"
+  ],
+  "license": "MIT"
+}
