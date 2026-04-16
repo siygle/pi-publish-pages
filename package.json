@@ -1,7 +1,7 @@
 {
   "name": "pi-publish-pages",
   "version": "0.1.0",
-  "description": "Telegraph (telegra.ph) wrapper extension for pi. Publish, update, delete (soft-delete) pages via Telegraph API.",
+  "description": "AgentGate-first publishing extension for pi with Telegraph fallback. Publish markdown pages via encrypted AgentGate sharing or Telegraph.",
   "type": "module",
   "main": "dist/index.js",
   "pi": {
@@ -32,9 +32,11 @@
   "keywords": [
     "pi",
     "extension",
+    "agentgate",
     "telegraph",
     "publish",
-    "markdown"
+    "markdown",
+    "encrypted-sharing"
   ],
   "license": "MIT"
 }
