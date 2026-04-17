@@ -12,6 +12,7 @@
 ## 功能
 
 - 🔐 **AgentGate 優先發佈** — `create` 預設先嘗試 AgentGate，再 fallback 到 Telegraph
+- ✅ **內建安全驗證流程** — AgentGate 上傳後會抓回分享頁面的 encrypted payload，於本機做解密驗證；驗證成功才回傳 URL 與 passphrase
 - 📝 **建立** — 將 markdown 發佈為分享頁面
 - ✏️ **更新** — 修改既有 Telegraph 頁面
 - 🗑️ **刪除** — Telegraph 軟刪除（清空內容，顯示在地化刪除提示）
@@ -123,6 +124,9 @@ Extension 註冊了 `publish_page` 工具，LLM 可以直接呼叫：
 - 用於 `create`
 - 透過本機 `agentgate` CLI 上傳
 - 內容加密後上傳
+- 上傳後會重新抓回分享頁面中的 encrypted payload
+- 於本機執行解密驗證，確認 passphrase 與檔案內容正確
+- **只有驗證成功才會回傳 URL 與 passphrase**
 - 連結預設 24 小時後過期
 - 讀取時需要 passphrase
 - 未安裝 CLI 時會顯示警告
