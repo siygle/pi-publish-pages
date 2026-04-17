@@ -165,10 +165,10 @@ function extractEncryptedPayload(html: string): string | null {
 
 function decodeHtmlEntities(input: string): string {
   return input
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCharCode(parseInt(code, 16)))
     .replace(/&quot;/g, '"')
-    .replace(/&#34;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
