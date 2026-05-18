@@ -26,12 +26,14 @@ export interface AgentGateCreateResult {
   passphrase: string;
   title: string;
   filename: string;
+  manageUrl?: string;
 }
 
 interface AgentGateCliResponse {
   success?: boolean;
   data?: {
     preview_url?: string;
+    manage_url?: string;
     id?: string;
   };
   error?: string;
@@ -66,7 +68,7 @@ export class AgentGateClient {
     }
   }
 
-  async createMarkdownPage(title: string, markdown: string, passphrase?: string, ttl?: string): Promise<AgentGateCreateResult> {
+  async createMarkdownPage(title: string, markdown: string, passphrase?: string, ttl?: string, noExpiry = false): Promise<AgentGateCreateResult> {
     const installed = await this.isCliInstalled();
     if (!installed) {
       throw new Error(
@@ -84,7 +86,13 @@ export class AgentGateClient {
       await fs.writeFile(filePath, content, "utf8");
 
       const effectiveTtl = ttl || this.config.default_ttl || "7d";
-      const cliArgs = ["files", "-s", this.serverUrl, "-p", effectivePassphrase, "-t", effectiveTtl, filePath];
+      const cliArgs = ["files", "-s", this.serverUrl, "-p", effectivePassphrase];
+      if (noExpiry) {
+        cliArgs.push("--no-expiry");
+      } else {
+        cliArgs.push("-t", effectiveTtl);
+      }
+      cliArgs.push(filePath);
       const { stdout, stderr } = await execFileAsync(
         this.cliPath,
         cliArgs,
@@ -96,19 +104,25 @@ export class AgentGateClient {
 
       const raw = `${stdout || ""}${stderr || ""}`.trim();
       const result = parseCliResponse(raw);
-      if (!result.data?.id || !result.data?.preview_url) {
+      if (!result.data?.preview_url) {
         throw new Error(result.error || `AgentGate CLI 回傳格式無法解析：${raw.slice(0, 300)}`);
       }
 
-      const url = normalizePreviewUrl(this.serverUrl, result.data.preview_url, result.data.id);
+      const id = result.data.id || extractShareId(result.data.preview_url);
+      if (!id) {
+        throw new Error(result.error || `AgentGate CLI 回傳缺少分享 ID：${raw.slice(0, 300)}`);
+      }
+      const url = normalizePreviewUrl(this.serverUrl, result.data.preview_url, id);
+      const manageUrl = result.data.manage_url ? normalizeManageUrl(this.serverUrl, result.data.manage_url) : undefined;
       await verifyUploadedShare(url, effectivePassphrase, filename);
 
       return {
-        id: result.data.id,
+        id,
         url,
         passphrase: effectivePassphrase,
         title,
         filename,
+        manageUrl,
       };
     } catch (e: any) {
       if (e?.code === "ENOENT") {
@@ -209,9 +223,18 @@ function parseCliResponse(raw: string): AgentGateCliResponse {
 
   try {
     return JSON.parse(raw) as AgentGateCliResponse;
-  } catch {
-    throw new Error(`無法解析 AgentGate CLI 輸出：${raw.slice(0, 300)}`);
+  } catch {}
+
+  const previewLine = lines.find((line) => /^Preview URL:\s*/i.test(line));
+  const manageLine = lines.find((line) => /^Manage URL:\s*/i.test(line));
+  const preview_url = previewLine?.replace(/^Preview URL:\s*/i, "").trim();
+  const manage_url = manageLine?.replace(/^Manage URL:\s*/i, "").trim();
+  const id = preview_url ? extractShareId(preview_url) : undefined;
+  if (preview_url) {
+    return { success: true, data: { preview_url, manage_url, id } };
   }
+
+  throw new Error(`無法解析 AgentGate CLI 輸出：${raw.slice(0, 300)}`);
 }
 
 function ensureTitleHeading(title: string, markdown: string): string {
@@ -241,6 +264,32 @@ function normalizePreviewUrl(serverUrl: string, previewUrl: string, id: string):
     return preview.toString();
   } catch {
     return `${serverUrl.replace(/\/+$/, "")}/f/${id}`;
+  }
+}
+
+function normalizeManageUrl(serverUrl: string, manageUrl: string): string {
+  try {
+    const server = new URL(serverUrl);
+    const manage = new URL(manageUrl, serverUrl);
+    if (manage.hostname === "localhost" || manage.hostname === "127.0.0.1") {
+      manage.protocol = server.protocol;
+      manage.hostname = server.hostname;
+      manage.port = server.port;
+    }
+    return manage.toString();
+  } catch {
+    return manageUrl;
+  }
+}
+
+function extractShareId(url: string): string | undefined {
+  try {
+    const parsed = new URL(url, "http://localhost");
+    const match = parsed.pathname.match(/\/(?:d|f)\/([^/?#]+)/);
+    return match?.[1];
+  } catch {
+    const match = url.match(/\/(?:d|f)\/([^/?#]+)/);
+    return match?.[1];
   }
 }
 

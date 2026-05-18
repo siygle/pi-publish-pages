@@ -179,6 +179,7 @@ export default function (pi: ExtensionAPI) {
       author: Type.Optional(Type.String({ description: "Author name (for create/update)" })),
       passphrase: Type.Optional(Type.String({ description: "AgentGate passphrase override for create" })),
       ttl: Type.Optional(Type.String({ description: 'AgentGate TTL for create, e.g. "7d", "24h", "30m". Default: "7d"' })),
+      no_expiry: Type.Optional(Type.Boolean({ description: "AgentGate only: keep the share indefinitely. Mutually exclusive with ttl." })),
       lang: Type.Optional(
         Type.String({
           description: 'Language for the delete notice: "zh-TW", "zh-CN", "en", "ja", "ko". Default: "zh-TW"',
@@ -187,7 +188,7 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const { action, provider = "auto", path: pagePath, title, markdown, author, passphrase, ttl, lang } = params as {
+      const { action, provider = "auto", path: pagePath, title, markdown, author, passphrase, ttl, no_expiry, lang } = params as {
         action: "create" | "update" | "delete" | "list" | "get";
         provider?: "auto" | ProviderName;
         path?: string;
@@ -196,6 +197,7 @@ export default function (pi: ExtensionAPI) {
         author?: string;
         passphrase?: string;
         ttl?: string;
+        no_expiry?: boolean;
         lang?: string;
       };
 
@@ -230,10 +232,14 @@ export default function (pi: ExtensionAPI) {
                 }
 
                 try {
-                  const page = await agentGateClient.createMarkdownPage(title, markdown, passphrase, ttl);
-                  const effectiveTtl = ttl || activeConfig.agentgate?.default_ttl || "7d";
+                  if (ttl && no_expiry) {
+                    return err("AgentGate 的 ttl 與 no_expiry 不能同時使用。");
+                  }
+                  const page = await agentGateClient.createMarkdownPage(title, markdown, passphrase, ttl, Boolean(no_expiry));
+                  const effectiveTtl = no_expiry ? "no-expiry" : ttl || activeConfig.agentgate?.default_ttl || "7d";
+                  const manageLine = page.manageUrl ? `\nManage URL: ${page.manageUrl}` : "";
                   return ok(
-                    `頁面已建立（AgentGate）。\n\nURL: ${page.url}\nPassphrase: ${page.passphrase}\nTTL: ${effectiveTtl}\n\n注意：AgentGate 內容為加密分享，開啟後需要輸入 passphrase。`,
+                    `頁面已建立（AgentGate）。\n\nURL: ${page.url}${manageLine}\nPassphrase: ${page.passphrase}\nTTL: ${effectiveTtl}\n\n注意：AgentGate 內容為加密分享，開啟後需要輸入 passphrase。${page.manageUrl ? "\nManage URL 請保密，可用來管理是否永久保留。" : ""}`,
                     {
                       action: "create",
                       provider: "agentgate",
@@ -243,6 +249,8 @@ export default function (pi: ExtensionAPI) {
                       filename: page.filename,
                       passphrase: page.passphrase,
                       ttl: effectiveTtl,
+                      no_expiry: Boolean(no_expiry),
+                      manage_url: page.manageUrl,
                     }
                   );
                 } catch (e: any) {
