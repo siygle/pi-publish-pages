@@ -12,6 +12,7 @@
 ## 功能
 
 - 🔐 **AgentGate 優先發佈** — `create` 預設先嘗試 AgentGate，再 fallback 到 Telegraph
+- ⏳ **AgentGate TTL** — 預設 7 天，可用 `ttl` 參數覆蓋，例如 `24h`、`7d`、`30m`
 - ✅ **內建安全驗證流程** — AgentGate 上傳後會抓回分享頁面的 encrypted payload，於本機做解密驗證；驗證成功才回傳 URL 與 passphrase
 - 📝 **建立** — 將 markdown 發佈為分享頁面
 - ✏️ **更新** — 修改既有 Telegraph 頁面
@@ -50,7 +51,8 @@ go install github.com/siygle/agentgate/cmd/agentgate@latest
   "provider_priority": ["agentgate", "telegraph"],
   "agentgate": {
     "server_url": "https://agentgate.sylee.dev",
-    "passphrase": "optional-default-passphrase"
+    "passphrase": "optional-default-passphrase",
+    "default_ttl": "7d"
   },
   "telegraph": {
     "access_token": "YOUR_TELEGRAPH_ACCESS_TOKEN",
@@ -64,6 +66,7 @@ go install github.com/siygle/agentgate/cmd/agentgate@latest
 - `provider_priority` 預設為 `agentgate`, `telegraph`
 - AgentGate 發佈會透過本機 `agentgate` CLI 執行，而不是直接呼叫 HTTP API
 - 若 `agentgate.passphrase` 未設定，建立頁面時會自動產生 passphrase，並在工具輸出中回傳
+- `agentgate.default_ttl` 預設為 `7d`；建立頁面時也可用工具參數 `ttl` 覆蓋
 - 若已設定 `agentgate.server_url` 但尚未安裝 CLI，session 啟動與 `/pages-setup` 都會顯示警告
 - 若只保留舊版格式：
 
@@ -109,6 +112,7 @@ Extension 註冊了 `publish_page` 工具，LLM 可以直接呼叫：
 - `action`: `create` / `update` / `delete` / `list` / `get`
 - `provider`: `auto` / `agentgate` / `telegraph`（預設 `auto`）
 - `passphrase`: AgentGate 建立頁面時可覆蓋預設 passphrase
+- `ttl`: AgentGate 建立頁面時可覆蓋預設 TTL，例如 `24h`、`7d`、`30m`
 
 ## 指令
 

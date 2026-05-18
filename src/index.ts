@@ -178,6 +178,7 @@ export default function (pi: ExtensionAPI) {
       markdown: Type.Optional(Type.String({ description: "Page content in markdown (for create/update)" })),
       author: Type.Optional(Type.String({ description: "Author name (for create/update)" })),
       passphrase: Type.Optional(Type.String({ description: "AgentGate passphrase override for create" })),
+      ttl: Type.Optional(Type.String({ description: 'AgentGate TTL for create, e.g. "7d", "24h", "30m". Default: "7d"' })),
       lang: Type.Optional(
         Type.String({
           description: 'Language for the delete notice: "zh-TW", "zh-CN", "en", "ja", "ko". Default: "zh-TW"',
@@ -186,7 +187,7 @@ export default function (pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const { action, provider = "auto", path: pagePath, title, markdown, author, passphrase, lang } = params as {
+      const { action, provider = "auto", path: pagePath, title, markdown, author, passphrase, ttl, lang } = params as {
         action: "create" | "update" | "delete" | "list" | "get";
         provider?: "auto" | ProviderName;
         path?: string;
@@ -194,6 +195,7 @@ export default function (pi: ExtensionAPI) {
         markdown?: string;
         author?: string;
         passphrase?: string;
+        ttl?: string;
         lang?: string;
       };
 
@@ -228,9 +230,10 @@ export default function (pi: ExtensionAPI) {
                 }
 
                 try {
-                  const page = await agentGateClient.createMarkdownPage(title, markdown, passphrase);
+                  const page = await agentGateClient.createMarkdownPage(title, markdown, passphrase, ttl);
+                  const effectiveTtl = ttl || activeConfig.agentgate?.default_ttl || "7d";
                   return ok(
-                    `頁面已建立（AgentGate）。\n\nURL: ${page.url}\nPassphrase: ${page.passphrase}\n\n注意：AgentGate 內容為加密分享，開啟後需要輸入 passphrase。`,
+                    `頁面已建立（AgentGate）。\n\nURL: ${page.url}\nPassphrase: ${page.passphrase}\nTTL: ${effectiveTtl}\n\n注意：AgentGate 內容為加密分享，開啟後需要輸入 passphrase。`,
                     {
                       action: "create",
                       provider: "agentgate",
@@ -239,6 +242,7 @@ export default function (pi: ExtensionAPI) {
                       title: page.title,
                       filename: page.filename,
                       passphrase: page.passphrase,
+                      ttl: effectiveTtl,
                     }
                   );
                 } catch (e: any) {

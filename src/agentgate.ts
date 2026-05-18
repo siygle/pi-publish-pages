@@ -16,6 +16,8 @@ export interface AgentGateConfig {
   server_url: string;
   passphrase?: string;
   cli_path?: string;
+  /** Default AgentGate TTL passed to CLI, e.g. "7d", "24h". */
+  default_ttl?: string;
 }
 
 export interface AgentGateCreateResult {
@@ -64,7 +66,7 @@ export class AgentGateClient {
     }
   }
 
-  async createMarkdownPage(title: string, markdown: string, passphrase?: string): Promise<AgentGateCreateResult> {
+  async createMarkdownPage(title: string, markdown: string, passphrase?: string, ttl?: string): Promise<AgentGateCreateResult> {
     const installed = await this.isCliInstalled();
     if (!installed) {
       throw new Error(
@@ -81,9 +83,11 @@ export class AgentGateClient {
     try {
       await fs.writeFile(filePath, content, "utf8");
 
+      const effectiveTtl = ttl || this.config.default_ttl || "7d";
+      const cliArgs = ["files", "-s", this.serverUrl, "-p", effectivePassphrase, "-t", effectiveTtl, filePath];
       const { stdout, stderr } = await execFileAsync(
         this.cliPath,
-        ["files", "-s", this.serverUrl, "-p", effectivePassphrase, filePath],
+        cliArgs,
         {
           timeout: 30000,
           maxBuffer: 1024 * 1024,
