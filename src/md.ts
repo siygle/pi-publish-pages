@@ -130,13 +130,17 @@ export function markdownToNodes(md: string): TelegraphNode[] {
 }
 
 /**
- * Parse inline markdown: **bold**, *italic*, `code`, [link](url)
+ * Parse inline markdown / lightweight HTML:
+ * - **bold**, *italic*, `code`
+ * - [link](url)
+ * - <a href="url">link</a> (common in Telegram/HTML digests)
+ * - bare https:// URLs
  */
 function parseInline(text: string): TelegraphNode[] {
   const result: TelegraphNode[] = [];
   let pos = 0;
 
-  const pattern = /(\*\*(.+?)\*\*)|(\*([^*]+?)\*)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))/g;
+  const pattern = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(\*\*(.+?)\*\*)|(\*([^*]+?)\*)|(`(.+?)`)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?，。；：！？）】》])/g;
 
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(text)) !== null) {
@@ -144,14 +148,19 @@ function parseInline(text: string): TelegraphNode[] {
       result.push(text.slice(pos, m.index));
     }
 
-    if (m[2]) {
-      result.push({ tag: "strong", children: [m[2]] });
-    } else if (m[4]) {
-      result.push({ tag: "em", children: [m[4]] });
+    if (m[1] && m[2]) {
+      result.push({ tag: "a", attrs: { href: decodeHtmlEntity(m[1]) }, children: [stripInlineHtml(decodeHtmlEntity(m[2]))] });
+    } else if (m[3] && m[4]) {
+      result.push({ tag: "a", attrs: { href: decodeHtmlEntity(m[4]) }, children: [m[3]] });
     } else if (m[6]) {
-      result.push({ tag: "code", children: [m[6]] });
-    } else if (m[8] && m[9]) {
-      result.push({ tag: "a", attrs: { href: m[9] }, children: [m[8]] });
+      result.push({ tag: "strong", children: [m[6]] });
+    } else if (m[8]) {
+      result.push({ tag: "em", children: [m[8]] });
+    } else if (m[10]) {
+      result.push({ tag: "code", children: [m[10]] });
+    } else if (m[11]) {
+      const url = decodeHtmlEntity(m[11]);
+      result.push({ tag: "a", attrs: { href: url }, children: [url] });
     }
 
     pos = m.index + m[0].length;
@@ -162,4 +171,17 @@ function parseInline(text: string): TelegraphNode[] {
   }
 
   return result.length ? result : [text];
+}
+
+function stripInlineHtml(text: string): string {
+  return text.replace(/<[^>]+>/g, "").trim();
+}
+
+function decodeHtmlEntity(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
